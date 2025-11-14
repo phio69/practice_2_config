@@ -9,7 +9,7 @@ import os
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Инструмент визуализации зависимости пакетов (NuGet)")
+    parser = argparse.ArgumentParser(description="Инструмент визуализации зависимости пакетов NuGet")
     parser.add_argument("--package", required=True, help="Имя анализируемого пакета")
     parser.add_argument("--repo-url", required=True, help="URL репозитория или путь к тестовому файлу")
     parser.add_argument("--version", required=True, help="Версия пакета")
@@ -93,6 +93,29 @@ def dfs_recursive(current, version_map, is_test_mode, source, visited, recursion
 
     recursion_stack.remove(current)
 
+
+#Построение обратного графа зависимостей
+def build_reverse_graph(forward_graph):
+    reverse_graph = {}
+    for pkg, deps in forward_graph.items():
+        for dep in deps:
+            if dep not in reverse_graph:
+                reverse_graph[dep] = []
+            reverse_graph[dep].append(pkg)
+    return reverse_graph
+
+
+#Сбор обратных зависимостей с использованием DFS
+def collect_reverse_deps(target, reverse_graph, visited, result):
+    if target in visited:
+        return
+    visited.add(target)
+    for parent in reverse_graph.get(target, []):
+        if parent not in result:
+            result.append(parent)
+        collect_reverse_deps(parent, reverse_graph, visited, result)
+
+
 def main():
     config = parse_args()
 
@@ -101,22 +124,31 @@ def main():
         print(f"    {k}: {v}")
     print()
 
-    version_map = {config.package: config.version}
-    visited = set()
-    recursion_stack = set()
-    full_graph = {}
-    cycles = []
+    #Построение полного графа для всех пакетов в тестовом режиме
+    if config.test_mode:
+        test_graph = load_test_graph(config.repo_url)
+        #Строим полный граф: для каждого пакета в test_graph
+        full_graph = {}
+        for pkg in test_graph.keys():
+            full_graph[pkg] = test_graph[pkg]
+    else:
+        #В реальном режиме — строим граф только от корневого пакета
+        version_map = {config.package: config.version}
+        visited = set()
+        recursion_stack = set()
+        full_graph = {}
+        cycles = []
 
-    dfs_recursive(
-        config.package,
-        version_map,
-        config.test_mode,
-        config.repo_url,
-        visited,
-        recursion_stack,
-        full_graph,
-        cycles
-    )
+        dfs_recursive(
+            config.package,
+            version_map,
+            config.test_mode,
+            config.repo_url,
+            visited,
+            recursion_stack,
+            full_graph,
+            cycles
+        )
 
     print("Полный граф зависимостей:")
     for pkg, deps in full_graph.items():
@@ -125,12 +157,17 @@ def main():
         else:
             print(f"  {pkg} → (нет зависимостей)")
 
-    if cycles:
-        print("\nОбнаружены циклические зависимости:")
-        for cycle in cycles:
-            print(f"  Цикл: {' → '.join(cycle)}")
+    print("\nЭтап 4: Обратные зависимости")
+    reverse_graph = build_reverse_graph(full_graph)
+    reverse_deps = []
+    collect_reverse_deps(config.package, reverse_graph, set(), reverse_deps)
+
+    if reverse_deps:
+        print(f"Пакеты, которые зависят от '{config.package}':")
+        for pkg in reverse_deps:
+            print(f"  - {pkg}")
     else:
-        print("\nЦиклические зависимости не обнаружены.")
+        print(f"Нет пакетов, которые зависят от '{config.package}'.")
 
 
 if __name__ == "__main__":
