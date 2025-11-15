@@ -115,6 +115,16 @@ def collect_reverse_deps(target, reverse_graph, visited, result):
             result.append(parent)
         collect_reverse_deps(parent, reverse_graph, visited, result)
 
+def generate_mermaid_code(graph):
+    lines = ["graph TD"]
+    for pkg, deps in graph.items():
+        if deps:
+            for dep in deps:
+                lines.append(f'    {pkg} --> {dep}')
+        else:
+            lines.append(f'    {pkg}')
+    return "\n".join(lines)
+
 
 def main():
     config = parse_args()
@@ -168,6 +178,25 @@ def main():
             print(f"  - {pkg}")
     else:
         print(f"Нет пакетов, которые зависят от '{config.package}'.")
+
+    #Генерация кода для 5 этапа
+    mermaid_code = generate_mermaid_code(full_graph)
+    output_file = config.output
+    if output_file.endswith(".svg"):
+        mmd_file = output_file.replace(".svg", ".mmd")
+    else:
+        mmd_file = output_file + ".mmd"
+
+    try:
+        with open(mmd_file, "w", encoding="utf-8") as f:
+            f.write(mermaid_code)
+        print(f"\nMermaid-код сохранён в файл: {mmd_file}")
+        print("Чтобы получить SVG:")
+        print("1. Перейдите на https://mermaid.live")
+        print("2. Вставьте содержимое файла")
+        print("3. Нажмите 'Download SVG'")
+    except Exception as e:
+        print(f"Ошибка при сохранении Mermaid-файла: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
